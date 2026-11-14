@@ -36,7 +36,10 @@ pub const ED25519_SIGNATURE_LEN: usize = 64;
 /// The Package Roots compiled into every binary (ADR-0063 clause 1), each a DER certificate. The
 /// custodian's Root is added by a reviewed change; until then the list is empty and nothing
 /// verifies.
-const COMPILED_ROOTS: &[&[u8]] = &[];
+const COMPILED_ROOTS: &[&[u8]] = &[
+    // FORK TEST ONLY — never merge: a test Root made on a laptop for zenosaaur/classis.
+    include_bytes!("package-roots/fork-test-root.der"),
+];
 
 /// The variable a **debug** build reads one more Package Root from, a DER file, so the
 /// integration tests can sign with a Root of their own. A release build compiles no such read

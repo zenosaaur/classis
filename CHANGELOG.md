@@ -19,12 +19,12 @@ A section carries a date once its tag exists.
 - **Each release signs the Client's archives**
   ([ADR-0062](docs/adr/0062-the-release-run-signs-every-entry-of-the-clients-own-package-with-a-key-only-a-reviewed-version-tag-reaches.md)).
   Beside every `supervisor_<version>_<os>_<arch>.tar.gz`
-  the release carries its `.sig`, and with them `package-signing-key.pub`, the
-  public half of the key they verify against. Set its content as
-  `[packages] verification_key`, or place the file beside the Client's program
-  when you install it, and upload each archive with the signature its `.sig`
-  holds; the release notes give the commands. An installation that signs with a
-  key of its own keeps doing so.
+  the release carries its `.sig`: the certificate of the release's Package
+  Signer and its signature, in lowercase hex
+  ([ADR-0063](docs/adr/0063-a-package-is-accepted-only-when-a-package-signer-the-compiled-in-package-root-issued-signed-it.md)).
+  Upload each archive with the signature its `.sig` holds; the release notes
+  give the commands. Nothing is configured for it on the Server or on any
+  Client, and the release publishes no key.
 - **A release starts from a pushed tag.** The `Release` workflow no longer
   creates the `version/*` tag, and a run started by hand is a dry run.
 
@@ -78,5 +78,50 @@ A section carries a date once its tag exists.
   - **Unchanged:** the certificate URIs `urn:opamp-fleet:…`, the proof and
     signing formats `opamp-fleet-…-v1`, the Gateway's binding store, and the
     PostgreSQL advisory lock, so a Server before the rename and one after it
-    still refuse to share a schema. Issued certificates, signed packages,
-    signing files and Gateway bindings remain valid across the upgrade.
+    still refuse to share a schema. Issued certificates and Gateway bindings
+    remain valid across the upgrade. Package signatures and signing files
+    survive the rename, but not the Package Roots below.
+- **Package signatures are verified up to the Package Roots compiled into the
+  Client and the Server**
+  ([ADR-0063](docs/adr/0063-a-package-is-accepted-only-when-a-package-signer-the-compiled-in-package-root-issued-signed-it.md)).
+  A signature is now the certificate of a Package Signer that a compiled-in
+  Package Root issued, and that signer's Ed25519 signature over the same
+  statement as before, in one DER value. The REST API
+  (`PUT …/entries/{os}/{arch}/signature`, `{"signature": "<hex>"}`) and a
+  release's `.sig` carry it as lowercase hex. Nothing is configured on either
+  side.
+  - **A signature made with a key of your own is refused**, by the Server and by
+    every Client: one from `classisctl package sign`, by hand or through the
+    signing file, and every 64-byte signature stored before this release.
+    Today the release's Package Signer is the only one, so only the Client's
+    own Package can be delivered; `otelcol`, other third-party Packages and
+    builds of your own cannot, until Package Signers exist for them.
+    `classisctl package keygen`, `sign` and `public-key`, the signing file,
+    the package key `pki init` writes and the install's key question remain
+    for now; what they make is refused or ignored.
+  - **The Server refuses a signature that does not verify** with `400`, naming
+    the step that failed, and stores nothing. At startup it removes every
+    stored signature that no longer verifies — each one stored before this
+    release, and one whose Package Signer has expired — with a warning naming
+    the entry. Upload the release's `.sig` again for each entry you need.
+  - **`signature_state` is `valid` or `missing`.** `invalid` and `unchecked`
+    no longer occur.
+  - **A Client from before this release cannot update itself to it**: it
+    expects a 64-byte signature checked against its `verification_key`.
+    Upgrade each installation once by hand, from the release's `.deb`, `.rpm`,
+    `.msi` or archive; it updates itself from then on.
+- **Every Client takes packages**
+  ([ADR-0063](docs/adr/0063-a-package-is-accepted-only-when-a-package-signer-the-compiled-in-package-root-issued-signed-it.md)).
+  Every Supervisor declares `AcceptsPackages`, and the Client's own Agent does
+  while `[packages] self_update` consents, which is unchanged. No setting turns
+  packages off: a Client without a verification key no longer takes none.
+
+### Removed
+
+- **`[packages] verification_key` is no longer read**, by the Client or the
+  Server
+  ([ADR-0063](docs/adr/0063-a-package-is-accepted-only-when-a-package-signer-the-compiled-in-package-root-issued-signed-it.md)).
+  A `supervisor.toml` or `server.toml` that still holds it loads, and the
+  program says once at startup that the key is ignored; remove it. The release
+  no longer publishes `package-signing-key.pub`, and one beside the Client's
+  program at install is still written into the file, and ignored.
